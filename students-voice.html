@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>تسجيل أسماء الطلاب بالصوت</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--text:#1d1d1b;--muted:#6b6b66;--accent:#1d6f5c;--danger:#b3261e;--line:#e2e2dd;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161615;--card:#212120;--text:#f0f0ec;--muted:#a0a09a;--accent:#4fc3a1;--danger:#f2b8b5;--line:#33332f}}
+:root[data-theme="dark"]{--bg:#161615;--card:#212120;--text:#f0f0ec;--muted:#a0a09a;--accent:#4fc3a1;--danger:#f2b8b5;--line:#33332f}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,"Segoe UI",Tahoma,sans-serif;padding:20px 16px;max-width:560px;margin-inline:auto}
+h1{font-size:1.3rem;margin:0 0 4px}
+p.sub{color:var(--muted);margin:0 0 16px;font-size:.9rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+#mic{width:84px;height:84px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:2rem;cursor:pointer;display:block;margin:0 auto 10px}
+#mic.on{background:var(--danger);animation:p 1s infinite}
+@keyframes p{50%{transform:scale(1.07)}}
+#status{text-align:center;color:var(--muted);font-size:.9rem;min-height:1.3em}
+.row{display:flex;gap:8px;margin-top:12px}
+input{flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:1rem}
+button.s{padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer;font-size:.95rem}
+button.p{background:var(--accent);color:#fff;border-color:var(--accent)}
+ol{margin:0;padding-inline-start:22px}
+li{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)}
+li button{background:none;border:0;color:var(--danger);cursor:pointer;font-size:1.1rem}
+.empty{color:var(--muted);text-align:center;padding:8px}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+</style>
+</head>
+<body>
+<h1>🎙️ تسجيل أسماء الطلاب بالصوت</h1>
+<p class="sub">اضغط على الميكروفون وانطق اسم الطالب، ثم راجع الاسم وأضفه.</p>
+
+<div class="card">
+  <button id="mic" aria-label="ابدأ التسجيل">🎤</button>
+  <div id="status">جاهز</div>
+  <div class="row">
+    <input id="name" placeholder="سيظهر الاسم هنا (يمكنك تعديله)">
+    <button class="s p" id="add">إضافة</button>
+  </div>
+</div>
+
+<div class="card">
+  <strong>القائمة (<span id="count">0</span>)</strong>
+  <ol id="list"></ol>
+  <div class="acts">
+    <button class="s" id="copy">نسخ القائمة</button>
+    <button class="s" id="csv">تحميل CSV</button>
+    <button class="s" id="clear">مسح الكل</button>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let students=[];
+try{students=JSON.parse(localStorage.getItem("students")||"[]")}catch(e){}
+function save(){try{localStorage.setItem("students",JSON.stringify(students))}catch(e){}}
+function render(){
+  const ol=$("list");ol.innerHTML="";
+  $("count").textContent=students.length;
+  if(!students.length){ol.innerHTML='<div class="empty">لا توجد أسماء بعد</div>';return}
+  students.forEach((n,i)=>{
+    const li=document.createElement("li");
+    const s=document.createElement("span");s.textContent=n;
+    const b=document.createElement("button");b.textContent="✕";b.setAttribute("aria-label","حذف");
+    b.onclick=()=>{students.splice(i,1);save();render()};
+    li.append(s,b);ol.append(li);
+  });
+}
+function addName(){
+  const v=$("name").value.trim();
+  if(!v)return;
+  students.push(v);$("name").value="";save();render();
+}
+$("add").onclick=addName;
+$("name").addEventListener("keydown",e=>{if(e.key==="Enter")addName()});
+
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const mic=$("mic"),st=$("status");
+if(!SR){
+  st.textContent="المتصفح لا يدعم التعرف على الصوت. جرّب Chrome أو Safari.";
+  mic.disabled=true;
+}else{
+  const rec=new SR();
+  rec.lang="ar-SA";          // غيّرها إلى ar-EG أو en-US حسب الحاجة
+  rec.interimResults=true;
+  rec.maxAlternatives=1;
+  let listening=false;
+  rec.onstart=()=>{listening=true;mic.classList.add("on");st.textContent="جارٍ الاستماع… تكلّم الآن"};
+  rec.onend=()=>{listening=false;mic.classList.remove("on");if(st.textContent.startsWith("جارٍ"))st.textContent="تم. راجع الاسم ثم اضغط إضافة"};
+  rec.onerror=e=>{st.textContent="خطأ: "+(e.error==="not-allowed"?"اسمح باستخدام الميكروفون":e.error)};
+  rec.onresult=e=>{
+    let t="";
+    for(let i=e.resultIndex;i<e.results.length;i++)t+=e.results[i][0].transcript;
+    $("name").value=t.trim();
+  };
+  mic.onclick=()=>{listening?rec.stop():rec.start()};
+}
+
+$("copy").onclick=async()=>{
+  try{await navigator.clipboard.writeText(students.map((n,i)=>(i+1)+". "+n).join("\n"));st.textContent="تم النسخ"}
+  catch(e){st.textContent="تعذّر النسخ"}
+};
+$("csv").onclick=()=>{
+  const csv="\ufeff#,الاسم\n"+students.map((n,i)=>(i+1)+',"'+n.replace(/"/g,'""')+'"').join("\n");
+  const a=document.createElement("a");
+  a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);
+  a.download="students.csv";a.click();
+};
+$("clear").onclick=()=>{if(confirm("مسح كل الأسماء؟")){students=[];save();render()}};
+render();
+</script>
+</body>
+</html>
